@@ -2,6 +2,11 @@
 name = "udp2p"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+authors = ["Andrew N. Smith <asmith@vrrb.io>"]
+description = "The peer discovery package of the udp2p library, used for discovering peers in a peer to peer network"
+documentation = "https://doc.rs/udp2p_discovery/0.1.0/udp2p"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
