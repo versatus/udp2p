@@ -1,0 +1,17 @@
+[package]
+name = "udp2p"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1.0.133", features = ["derive"] }
+serde_json = "1.0.75"
+rand = "0.8.4"
+tokio = { version = "1.15.0", features = ["sync"]}
+ritelinked = "0.3.2"
+hex = "0.4.3"
+log = "0.4.14"
+public-ip = "0.2.1"
+sha256 = "1.0.3"
