@@ -24,7 +24,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 9292 and 19292 on the localhost address.
     let port: usize = thread_rng().gen_range(9292..19292);
     let pub_ip = public_ip::addr_v4().await;
-    println!("DEBUG - Public IP = {:?}", pub_ip.clone().unwrap());
     let addr: SocketAddr = format!("0.0.0.0:{:?}", port)
         .parse()
         .expect("Unable to parse address");
@@ -146,7 +145,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     thread::spawn(move || {
         loop {
-            match chat_rx.try_recv() {
+            match chat_rx.recv() {
                 Ok(string) => println!("{:?}", string),
                 Err(_) => {}
             }

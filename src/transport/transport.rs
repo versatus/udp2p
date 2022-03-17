@@ -79,7 +79,6 @@ impl Transport {
                         if split_local[0] == split_peer[0] {
                             let new_ip = "127.0.0.1".parse::<Ipv4Addr>().unwrap();
                             let port = split_peer[1].parse::<u32>().unwrap();
-                            println!("DEBUG - Peer is local, sending to local address: 127.0.0.1:{:?}", port);
                             let new_src = format!("{:?}:{:?}", new_ip, port).parse::<SocketAddr>().unwrap();
                             self.gd_udp.send_reliable(&new_src, packet, &sock);
                         } else {

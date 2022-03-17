@@ -234,7 +234,6 @@ impl GossipService {
                 sample
             }
         };
-        println!("Peers to gossip to: {:?}", gossip_to);
         gossip_to.iter().for_each(|peer| {
             if let Err(_) = self.to_transport_tx.send((peer.clone(), message.clone())) {
                 println!("Error forwarding to transport")
@@ -259,14 +258,20 @@ impl GossipService {
                     if let Err(e) = self.to_app_tx.send(message.clone()) {
                         info!("Error sending message to application layer: {:?}", e)
                     }
-                }
-                let key = MessageKey::from_inner(message.id);
-                self.publish(src, msg.clone());
-                self.cache.entry(key).or_insert((msg.clone(), Instant::now()));
-            }
+                    let msg_string = String::from_utf8_lossy(&message.data);
+                    let key = MessageKey::from_inner(message.id);
+                    self.publish(src, msg.clone());
+                    self.cache.entry(key).or_insert((msg.clone(), Instant::now()));    
+                    return Some(msg_string.to_string())
+                } else {
+                    let key = MessageKey::from_inner(message.id);
+                    self.cache.entry(key).or_insert((msg.clone(), Instant::now()));
+                    return None
 
-            let msg_string = String::from_utf8_lossy(&message.data);
-            Some(msg_string.to_string())
+                }
+            } else {
+                None
+            }
         } else {
             None
         }

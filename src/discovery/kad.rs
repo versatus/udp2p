@@ -258,7 +258,6 @@ impl Kademlia {
         let req_msg = Req::from_bytes(&req);
         if let Some(request) = req_msg {
             let (id, sender, rpc) = request.to_components();
-            println!("DEBUG - Received request from {:?}", sender);
             self.add_peer(sender.clone().unwrap().as_bytes().unwrap());
             match rpc.unwrap() {
                 RPC::FindNode(node) => {
