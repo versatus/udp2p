@@ -103,9 +103,9 @@ impl Kademlia {
     /// 
     pub fn bootstrap(&mut self, bootstrap: &SocketAddr) {
         // Structure Message
+        println!("Bootstrapping peer: {:?}", bootstrap);
         let local_info = self.routing_table.local_info.clone();
         let (id, message) = self.prepare_find_node_message(local_info, None);
-        println!("{:?}", message);
         if let Err(e) = self.to_transport.send((bootstrap.clone(), message)) {
             println!("Error sending to transport: {:?}", e);
         }
@@ -258,6 +258,7 @@ impl Kademlia {
         let req_msg = Req::from_bytes(&req);
         if let Some(request) = req_msg {
             let (id, sender, rpc) = request.to_components();
+            println!("DEBUG - Received request from {:?}", sender);
             self.add_peer(sender.clone().unwrap().as_bytes().unwrap());
             match rpc.unwrap() {
                 RPC::FindNode(node) => {

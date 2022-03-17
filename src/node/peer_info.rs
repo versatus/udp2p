@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::net::{SocketAddr, Ipv4Addr};
 use crate::traits::routable::Routable;
 use crate::node::peer_id::PeerId;
 use crate::node::peer_key::Key;
@@ -48,6 +48,8 @@ impl Ord for PeerInfoDistancePair {
 pub struct PeerInfo {
     pub id: PeerId,
     pub key: Key,
+    pub ip: Ipv4Addr,
+    pub port: u32,
     pub address: SocketAddr,
 }
 
@@ -61,11 +63,14 @@ impl PeerInfo {
     /// * key - the key used to generate the PeerId
     /// * address - the receiving socket address for the local node
     /// 
-    pub fn new(id: PeerId, key: Key, address: SocketAddr) -> Self {
-        
+    pub fn new(id: PeerId, key: Key, ip: Ipv4Addr, port: u32) -> Self {
+        let address = format!("{:?}:{:?}", ip, port).parse().expect("Unable to parse socket address");
+        println!("Address: {:?}", address);
         PeerInfo {
             id,
             key,
+            ip,
+            port,
             address,
         }
     }

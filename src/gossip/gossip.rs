@@ -41,6 +41,7 @@ pub struct GossipConfig {
 /// messages, peer sampling, and other message
 pub struct GossipService {
     address: SocketAddr,
+    public_ip: SocketAddr,
     to_gossip_rx: Receiver<(SocketAddr, Message)>,
     pub to_transport_tx: Sender<(SocketAddr, Message)>,
     pub to_app_tx: Sender<GossipMessage>,
@@ -127,6 +128,7 @@ impl GossipService {
     /// 
     pub fn new(
         address: SocketAddr,
+        public_ip: SocketAddr,
         to_gossip_rx: Receiver<(SocketAddr, Message)>,
         to_transport_tx: Sender<(SocketAddr, Message)>,
         to_app_tx: Sender<GossipMessage>,
@@ -137,6 +139,7 @@ impl GossipService {
     ) -> GossipService {
         GossipService {
             address,
+            public_ip,
             to_gossip_rx,
             to_transport_tx,
             to_app_tx,
@@ -149,10 +152,12 @@ impl GossipService {
     }
 
     /// The main gossip service loop
-    pub fn start(&mut self) {
+    pub fn start(&mut self, tx: Sender<String>) {
+        let inner_tx = tx.clone();
         loop {
+            let tx = inner_tx.clone();
             self.kad.recv();
-            self.recv();
+            self.recv(tx.clone());
             self.gossip();
         }
     }
@@ -229,8 +234,7 @@ impl GossipService {
                 sample
             }
         };
-
-        println!("Gossiping to: {:?}", gossip_to);
+        println!("Peers to gossip to: {:?}", gossip_to);
         gossip_to.iter().for_each(|peer| {
             if let Err(_) = self.to_transport_tx.send((peer.clone(), message.clone())) {
                 println!("Error forwarding to transport")
@@ -248,7 +252,7 @@ impl GossipService {
     /// * src - the sender of the incoming message
     /// * msg - the incoming message to be handled
     /// 
-    fn handle_message(&mut self, src: &SocketAddr, msg: &Message) {
+    fn handle_message(&mut self, src: &SocketAddr, msg: &Message) -> Option<String> {
         if let Some(message) = GossipMessage::from_bytes(&msg.msg){
             if !self.cache.contains_key(&MessageKey::from_inner(message.id)) {
                 if *src != self.address {
@@ -260,17 +264,30 @@ impl GossipService {
                 self.publish(src, msg.clone());
                 self.cache.entry(key).or_insert((msg.clone(), Instant::now()));
             }
+
+            let msg_string = String::from_utf8_lossy(&message.data);
+            Some(msg_string.to_string())
+        } else {
+            None
         }
     }
 
     /// receives messages coming into the "to_gossip_rx"
-    pub fn recv(&mut self) {
+    pub fn recv(&mut self, tx: Sender<String>) {
         let res = self.to_gossip_rx.try_recv();
         match res {
             Ok((src, msg)) => {
-                self.handle_message(&src, &msg);
+                if let Some(string) = self.handle_message(&src, &msg) {
+                    if let Err(e) = tx.clone().send(string) {
+                        println!("Error sending message");
+                    }
+                }
             }
-            Err(_) => {}
+            Err(_) => { }
         }
+    }
+
+    pub fn get_pub_ip(&self) -> SocketAddr {
+        self.public_ip.clone()
     }
 }

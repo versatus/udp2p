@@ -143,6 +143,8 @@ impl RoutingTable {
         if let Some(bucket) = self.tree.get_mut(&prefix) {
             if !bucket.is_full() {
                 bucket.upsert(peer_info);
+                println!("DEBUG - added peer to routing table: Bucket Size = {:?}", bucket.size());
+                println!("DEBUG - added peer to routing table: Routing Table Size = {:?}", self.size());
                 return true
             } else {
                 self.update_peer(peer_info, traverse + 1)
@@ -150,7 +152,9 @@ impl RoutingTable {
         } else {
             let mut new_bucket = KBucket::new();
             new_bucket.upsert(peer_info);
-            self.tree.insert(prefix, new_bucket);
+            self.tree.insert(prefix, new_bucket.clone());
+            println!("DEBUG - added peer to routing table: {:?}", new_bucket.size());
+            println!("DEBUG - added peer to routing table: Routing Table Size = {:?}", self.size());
             return true
         }
     }

@@ -1,6 +1,6 @@
 use crate::gd_udp::gd_udp::GDUdp;
 use crate::protocol::protocol::{packetize, AckMessage, Header, Message, MessageKey};
-use std::net::{SocketAddr, UdpSocket};
+use std::net::{SocketAddr, UdpSocket, Ipv4Addr};
 use std::sync::mpsc::Receiver;
 use crate::utils::utils::ByteRep;
 
@@ -69,11 +69,22 @@ impl Transport {
                     });
                 }
                 _ => {
-                    println!("Sending message to: {:?}", src);
                     let packets_id = MessageKey::rand().inner();
+                    let ip = self.gd_udp.addr.to_string();
+                    let split_local: Vec<&str> = ip.split(":").collect();
+                    let peer = src.to_string();
+                    let split_peer: Vec<&str> = peer.split(":").collect();
                     let packets = packetize(msg.as_bytes().unwrap().clone(), packets_id, 1u8);
                     packets.iter().for_each(|packet| {
-                        self.gd_udp.send_reliable(&src, packet, &sock);
+                        if split_local[0] == split_peer[0] {
+                            let new_ip = "127.0.0.1".parse::<Ipv4Addr>().unwrap();
+                            let port = split_peer[1].parse::<u32>().unwrap();
+                            println!("DEBUG - Peer is local, sending to local address: 127.0.0.1:{:?}", port);
+                            let new_src = format!("{:?}:{:?}", new_ip, port).parse::<SocketAddr>().unwrap();
+                            self.gd_udp.send_reliable(&new_src, packet, &sock);
+                        } else {
+                            self.gd_udp.send_reliable(&src, packet, &sock);
+                        }
                     });
                 }
             },

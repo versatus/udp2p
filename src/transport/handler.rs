@@ -162,6 +162,7 @@ impl MessageHandler {
     fn handle_message(&self, message: Message, src: SocketAddr) {
         match message.head {
             Header::Request | Header::Response => {
+                println!("DEBUG - Received kad message from {:?}", src);
                 if let Some(msg) = KadMessage::from_bytes(&message.msg) {
                     if let Err(_) = self.kad_tx.send((src, msg)) {
                         println!("Error sending to kad");
@@ -176,6 +177,7 @@ impl MessageHandler {
                 }                
             }
             Header::Gossip => {
+                println!("Received gossip message");
                 if let Err(_) = self.gossip_tx.send((src, message)) {
                     println!("Error sending to gossip");
                 }

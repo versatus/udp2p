@@ -5,6 +5,7 @@ pub mod node;
 pub mod protocol;
 pub mod record;
 pub mod traits;
+pub mod transport;
 pub mod utils;
 
 #[cfg(test)]
