@@ -152,7 +152,7 @@ impl GossipService {
     }
 
     /// The main gossip service loop
-    pub fn start(&mut self, tx: Sender<String>) {
+    pub fn start(&mut self, tx: Sender<GossipMessage>) {
         let inner_tx = tx.clone();
         loop {
             let tx = inner_tx.clone();
@@ -251,18 +251,17 @@ impl GossipService {
     /// * src - the sender of the incoming message
     /// * msg - the incoming message to be handled
     /// 
-    fn handle_message(&mut self, src: &SocketAddr, msg: &Message) -> Option<String> {
+    fn handle_message(&mut self, src: &SocketAddr, msg: &Message) -> Option<GossipMessage> {
         if let Some(message) = GossipMessage::from_bytes(&msg.msg){
             if !self.cache.contains_key(&MessageKey::from_inner(message.id)) {
                 if *src != self.address {
                     if let Err(e) = self.to_app_tx.send(message.clone()) {
                         info!("Error sending message to application layer: {:?}", e)
                     }
-                    let msg_string = String::from_utf8_lossy(&message.data);
                     let key = MessageKey::from_inner(message.id);
                     self.publish(src, msg.clone());
                     self.cache.entry(key).or_insert((msg.clone(), Instant::now()));    
-                    return Some(msg_string.to_string())
+                    return Some(message)
                 } else {
                     let key = MessageKey::from_inner(message.id);
                     self.cache.entry(key).or_insert((msg.clone(), Instant::now()));
@@ -278,7 +277,7 @@ impl GossipService {
     }
 
     /// receives messages coming into the "to_gossip_rx"
-    pub fn recv(&mut self, tx: Sender<String>) {
+    pub fn recv(&mut self, tx: Sender<GossipMessage>) {
         let res = self.to_gossip_rx.try_recv();
         match res {
             Ok((src, msg)) => {
