@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (to_kad_tx, to_kad_rx) = channel();
     let (incoming_ack_tx, incoming_ack_rx): (Sender<AckMessage>, Receiver<AckMessage>) = channel();
     let (to_app_tx, _to_app_rx) = channel::<GossipMessage>();
-    let (chat_tx, chat_rx) = channel::<String>();
+    let (chat_tx, chat_rx) = channel::<GossipMessage>();
 
     // Initialize local peer information
     let key: Key = Key::rand();
