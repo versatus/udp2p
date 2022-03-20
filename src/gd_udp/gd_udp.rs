@@ -167,8 +167,6 @@ impl GDUdp {
         if let Some(bytes) = packet.as_bytes() {
             if let Err(e) = sock.send_to(&bytes, peer) {
                 info!("Error sending packet to {:?}:\n{:?}", peer, e)
-            } else {
-                info!("Sent packet {:?} to {:?}", &packet.id, peer)
             }
         }
     }
