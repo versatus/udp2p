@@ -1,16 +1,16 @@
 use crate::discovery::{MAX_BUCKETS, MAX_BUCKET_LEN, REFRESH_INTEVAL};
+use crate::node::peer_id::PeerId;
 use crate::node::peer_info::PeerInfo;
 use crate::node::peer_key::Key;
-use crate::utils::utils::Distance;
-use std::hash::Hash;
-use std::{cmp, mem};
-use crate::utils::utils::{timestamp_now};
-use std::collections::{BTreeMap, HashMap};
-use ritelinked::LinkedHashMap;
-use crate::node::peer_id::PeerId;
-use std::net::SocketAddr;
 use crate::protocol::protocol::InnerKey;
-
+use crate::utils::utils::timestamp_now;
+use crate::utils::utils::Distance;
+use log::info;
+use ritelinked::LinkedHashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::hash::Hash;
+use std::net::SocketAddr;
+use std::{cmp, mem};
 /// The derivative data type used to maintain clusters of peers
 /// in the routing table with the same xor prefix to the local peer.
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -42,35 +42,34 @@ impl KBucket {
     /// key/value pair moves the pair to the back making it the most recently
     /// used. This is beneficial for cleanup purposes when we want to remove
     /// or shuffle the LRU. It also updates the last updated field to now.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * peer - the peer to be inserted into the kbucket
     pub fn upsert(&mut self, peer: &PeerInfo) {
         self.last_updated = timestamp_now();
-        self.nodes.insert(peer.id.clone(), peer.clone());    
+        self.nodes.insert(peer.id.clone(), peer.clone());
     }
 
-
     /// Checks if the bucket contains the peer and returns true or false
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * peer - the peer to check
     pub fn contains(&self, peer: &PeerInfo) -> bool {
         self.nodes.contains_key(&peer.id)
     }
 
     /// Chreates and returns a new bucket.
-    /// 
+    ///
     /// TODO:
-    /// 
+    ///
     /// Need to implement actual splitting functionality, currently this just
     /// creates and returns a new bucket.
-    /// 
+    ///
     pub fn split(&mut self, index: usize, prefix: String) -> KBucket {
-        let mut new_bucket = KBucket::new();        
-        return new_bucket
+        let mut new_bucket = KBucket::new();
+        return new_bucket;
     }
 
     /// Returns a vector of all the Peers in the bucket without their key
@@ -89,9 +88,9 @@ impl KBucket {
     }
 
     /// Removes the peer requested to be removed from the bucket, if it exists.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * peer - the peer that we are requesting be removed.
     pub fn remove_peer(&mut self, peer: &PeerInfo) -> Option<PeerInfo> {
         self.nodes.remove(&peer.id)
@@ -117,33 +116,35 @@ impl KBucket {
 }
 
 impl RoutingTable {
-
     /// Creates a new instance of a RoutingTable
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * local_info - the local nodes PeerInfo to be inserted into the routing table
     pub fn new(local_info: PeerInfo) -> Self {
         let mut tree = HashMap::new();
         let mut kbucket = KBucket::new();
         kbucket.upsert(&local_info);
-        tree.insert(local_info.get_key().xor(local_info.get_key()).get_prefix(0), kbucket);
+        tree.insert(
+            local_info.get_key().xor(local_info.get_key()).get_prefix(0),
+            kbucket,
+        );
         RoutingTable { tree, local_info }
     }
 
     /// Recursively inserts or updates a peer into the routing table in the proper
     /// kbucket.
-    /// 
+    ///
     /// * peer_info - the peer to update
     /// * traverse - the xor prefix length to start at.
-    /// 
+    ///
     pub fn update_peer(&mut self, peer_info: &PeerInfo, traverse: usize) -> bool {
         let distance = self.local_info.get_key().xor(peer_info.get_key());
         let prefix = distance.get_prefix(traverse);
         if let Some(bucket) = self.tree.get_mut(&prefix) {
             if !bucket.is_full() {
                 bucket.upsert(peer_info);
-                return true
+                return true;
             } else {
                 self.update_peer(peer_info, traverse + 1)
             }
@@ -151,22 +152,22 @@ impl RoutingTable {
             let mut new_bucket = KBucket::new();
             new_bucket.upsert(peer_info);
             self.tree.insert(prefix, new_bucket.clone());
-            return true
+            return true;
         }
     }
 
     /// Returns a vector of the n the closest peers to the requested peer as measured by XOR
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * peer_info - the peer we are trying to find it's closest peers
     /// * count - the number of closest peers to find.\
-    /// 
+    ///
     pub fn get_closest_peers(&self, peer_info: PeerInfo, count: usize) -> Vec<PeerInfo> {
-        // If the requested number of peers exceeds or is equal to the total number of peers, 
+        // If the requested number of peers exceeds or is equal to the total number of peers,
         // in our local routing table simply return all the peers from the local routing table
         if self.total_peers() <= count {
-            return self.get_all_peers()
+            return self.get_all_peers();
         }
 
         // Otherwise, get the distance as measured by the XOR of the local key to the peer's key
@@ -176,8 +177,8 @@ impl RoutingTable {
         // as the distance.
         let mut cloned_tree = self.tree.clone();
         cloned_tree.retain(|k, bucket| {
-            let prefix = distance.get_prefix(k.len()-1);
-            prefix == *k 
+            let prefix = distance.get_prefix(k.len() - 1);
+            prefix == *k
         });
 
         // count the total number of peers contained in the cloned tree
@@ -194,15 +195,16 @@ impl RoutingTable {
             // Truncate the vector of peers to only include the number requested
             closest.truncate(count);
             // And return this vector.
-            return closest
+            return closest;
         }
 
         // if the cloned tree is not empty and the total number of peers is equal to
         // or exceeds the number requested, collect the prefixes, and the nodes
         // and return them as a vector of (prefix, Vec<PeerInfo>) tuples.
-        let mut closest: Vec<_> = cloned_tree.iter().map(|(k, v)| {
-            (k, v.get_nodes())
-        }).collect();
+        let mut closest: Vec<_> = cloned_tree
+            .iter()
+            .map(|(k, v)| (k, v.get_nodes()))
+            .collect();
 
         // Sort them by the lenght of the prefix and reverse it so that the longest
         // prefixes are first.
@@ -227,21 +229,21 @@ impl RoutingTable {
             if let Some((k, nodes)) = iter.next() {
                 ret.extend(nodes.clone())
             } else {
-                break
+                break;
             }
         }
 
         // sort the return vector by XOR to the requesting peer and truncate to
-        // only include the number requested. return the return vector. 
+        // only include the number requested. return the return vector.
         ret.sort_by_key(|peer| peer.get_key().xor(peer_info.get_key()));
         ret.truncate(count);
         ret
     }
 
     /// Removes the least recently used peer from a given kbucket
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * peer_key - the key of the peer used to find the kbucket that the LRU peer will be removed from
     pub fn remove_lru(&mut self, peer_key: &InnerKey) -> Option<PeerInfo> {
         // TODO:
@@ -249,11 +251,18 @@ impl RoutingTable {
         // tree and kbuckets are organized, restructure to work with the
         // prefix key system.
         let index = cmp::min(
-            self.local_info.get_key().xor(Key::new(*peer_key)).leading_zeros(),
+            self.local_info
+                .get_key()
+                .xor(Key::new(*peer_key))
+                .leading_zeros(),
             self.tree.len() - 1,
         );
 
-        let prefix = self.local_info.get_key().xor(Key::new(*peer_key)).get_prefix(index);
+        let prefix = self
+            .local_info
+            .get_key()
+            .xor(Key::new(*peer_key))
+            .get_prefix(index);
 
         if let Some(bucket) = self.tree.get_mut(&prefix) {
             return bucket.remove_lru();
@@ -263,9 +272,9 @@ impl RoutingTable {
     }
 
     /// Removes a specified peer from the routing table
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * peer_info - the peer to remove from the routing table.
     pub fn remove_peer(&mut self, peer_info: &PeerInfo) {
         // TODO:
@@ -273,19 +282,24 @@ impl RoutingTable {
         // tree and kbuckets are organized, restructure to work with the
         // prefix key system.
         let index = cmp::min(
-            self.local_info.get_key().xor(peer_info.get_key()).leading_zeros(),
+            self.local_info
+                .get_key()
+                .xor(peer_info.get_key())
+                .leading_zeros(),
             self.tree.len() - 1,
         );
 
-        let prefix = self.local_info.get_key().xor(peer_info.get_key()).get_prefix(index);
-        
+        let prefix = self
+            .local_info
+            .get_key()
+            .xor(peer_info.get_key())
+            .get_prefix(index);
         if let Some(bucket) = self.tree.get_mut(&prefix) {
-            println!("{}", bucket.size());
+            info!("{}", bucket.size());
             bucket.remove_peer(peer_info);
-            println!("{}", bucket.size());
+            info!("{}", bucket.size());
         }
     }
-
 
     /// Get stale buckets and return a vector of the keys of those buckets
     pub fn get_stale_indices(&self) -> Vec<String> {
@@ -301,11 +315,11 @@ impl RoutingTable {
 
     /// Check if a peer is a new peer or already exists in the routing table.
     /// return true or false
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * peer - the peer to check
-    /// 
+    ///
     pub fn is_new(&self, peer: &PeerInfo) -> bool {
         !self.tree.iter().any(|(_, bucket)| bucket.contains(peer))
     }
@@ -322,8 +336,12 @@ impl RoutingTable {
 
     /// Get all the peers in the routing table and return them as a vector of PeerInfo
     pub fn get_all_peers(&self) -> Vec<PeerInfo> {
-        self.tree.iter().map(|(k, v)| {
-            v.get_nodes()
-        }).collect::<Vec<_>>().into_iter().flatten().collect()
+        self.tree
+            .iter()
+            .map(|(k, v)| v.get_nodes())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .flatten()
+            .collect()
     }
 }

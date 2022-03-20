@@ -62,7 +62,6 @@ impl MessageHandler {
         let res = sock.recv_from(buf);
         match res {
             Ok((amt, src)) => {
-                info!("Received {:?} bytes from {:?}", amt, src);
                 if let Some(packet) = self.process_packet(local, buf.to_vec(), amt, src) {
                     self.insert_packet(packet, src)
                 }
@@ -95,7 +94,7 @@ impl MessageHandler {
                 };
 
                 if let Err(_) = self.om_tx.clone().send((src, message)) {
-                    println!("Error sending ack message to transport thread");
+                    info!("Error sending ack message to transport thread");
                 }
             }
         return Some(packet)
@@ -164,20 +163,20 @@ impl MessageHandler {
             Header::Request | Header::Response => {
                 if let Some(msg) = KadMessage::from_bytes(&message.msg) {
                     if let Err(_) = self.kad_tx.send((src, msg)) {
-                        println!("Error sending to kad");
+                        info!("Error sending to kad");
                     }
                 }
             }
             Header::Ack => {
                 if let Some(ack) = AckMessage::from_bytes(&message.msg) {
                     if let Err(_) = self.ia_tx.send(ack) {
-                        println!("Error sending ack message")
+                        info!("Error sending ack message")
                     }
                 }                
             }
             Header::Gossip => {
                 if let Err(_) = self.gossip_tx.send((src, message)) {
-                    println!("Error sending to gossip");
+                    info!("Error sending to gossip");
                 }
             }
         }

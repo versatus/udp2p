@@ -14,6 +14,7 @@ use crate::traits::routable::Routable;
 use crate::utils::utils::timestamp_now;
 use crate::utils::utils::ByteRep;
 use crate::utils::utils::Distance;
+use log::info;
 
 /// The kademlia is the basic struct used for Peer Discovery in this crate
 /// Kademlia has a RoutingTable, a to_transport sender and from transport receiver
@@ -103,11 +104,11 @@ impl Kademlia {
     /// 
     pub fn bootstrap(&mut self, bootstrap: &SocketAddr) {
         // Structure Message
-        println!("Bootstrapping peer: {:?}", bootstrap);
+        info!("Bootstrapping peer: {:?}", bootstrap);
         let local_info = self.routing_table.local_info.clone();
         let (id, message) = self.prepare_find_node_message(local_info, None);
         if let Err(e) = self.to_transport.send((bootstrap.clone(), message)) {
-            println!("Error sending to transport: {:?}", e);
+            info!("Error sending to transport: {:?}", e);
         }
         self.add_peer(self.routing_table.local_info.clone().as_bytes().unwrap());
     }
@@ -296,7 +297,7 @@ impl Kademlia {
                         .to_transport
                         .send((sender.unwrap().address.clone(), resp_msg.clone()))
                     {
-                        println!("Error sending to transport: {:?}", e);
+                        info!("Error sending to transport: {:?}", e);
                     }
                 }
                 _ => {
@@ -423,11 +424,11 @@ impl Kademlia {
             .to_transport
             .send((node.address.clone(), resp_msg.clone()))
         {
-            println!("Error sending to transport: {:?}", e);
+            info!("Error sending to transport: {:?}", e);
         }
         closest_peers.iter().for_each(|peer| {
             if let Err(e) = self.to_transport.send((peer.get_address(), msg.clone())) {
-                println!("Error sending to transport: {:?}", e);
+                info!("Error sending to transport: {:?}", e);
             }
         });
     }

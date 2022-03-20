@@ -236,7 +236,7 @@ impl GossipService {
         };
         gossip_to.iter().for_each(|peer| {
             if let Err(_) = self.to_transport_tx.send((peer.clone(), message.clone())) {
-                println!("Error forwarding to transport")
+                info!("Error forwarding to transport")
             }
         });
     }
@@ -283,7 +283,7 @@ impl GossipService {
             Ok((src, msg)) => {
                 if let Some(string) = self.handle_message(&src, &msg) {
                     if let Err(e) = tx.clone().send(string) {
-                        println!("Error sending message");
+                        info!("Error sending message");
                     }
                 }
             }
