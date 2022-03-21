@@ -58,18 +58,19 @@ impl GDUdp {
     /// * sock - the UDP socket for the local node used to resend unacknowldged packets.
     pub fn maintain(&mut self, sock: &UdpSocket) {
         self.outbox.retain(|_, map| {
-            map.retain(|_, (sent_set, ack_set, _, _)| sent_set != ack_set);
+            map.retain(|_, (sent_set, ack_set, _, attempts)| sent_set != ack_set && *attempts < 10);
             !map.is_empty()
         });
         
         self.outbox.clone().iter().for_each(|(_, map)| {
-            map.iter().for_each(|(_, (sent_set, ack_set, packet, _))| {
-                let resend: HashSet<_> = sent_set.difference(ack_set).collect();
+            map.iter().for_each(|(_, (sent_set, ack_set, packet, attempts))| {
+                if *attempts < 10 {
+                    let resend: HashSet<_> = sent_set.difference(ack_set).collect();
                     resend.iter().for_each(|peer| {
                         self.send_reliable(peer, &packet, sock);
                     });
                 }
-            );
+            });
         });
     }
 
