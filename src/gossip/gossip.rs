@@ -235,8 +235,10 @@ impl GossipService {
             }
         };
         gossip_to.iter().for_each(|peer| {
-            if let Err(_) = self.to_transport_tx.send((peer.clone(), message.clone())) {
-                info!("Error forwarding to transport")
+            if peer != src {
+                if let Err(_) = self.to_transport_tx.send((peer.clone(), message.clone())) {
+                    info!("Error forwarding to transport")
+                }
             }
         });
     }
