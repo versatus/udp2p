@@ -3,6 +3,7 @@ use crate::protocol::protocol::{packetize, AckMessage, Header, Message, MessageK
 use std::net::{SocketAddr, UdpSocket, Ipv4Addr};
 use std::sync::mpsc::Receiver;
 use crate::utils::utils::ByteRep;
+use log::info;
 
 /// A struct for managing the transport layer in a p2p network
 /// contains a GDUdp struct for sending reliable messages over UDP

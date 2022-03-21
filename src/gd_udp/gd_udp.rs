@@ -126,6 +126,8 @@ impl GDUdp {
         if let Some(map) = self.outbox.get_mut(&id) {
             if let Some((_, ack_set, _, _)) = map.get_mut(&packet_number) {
                 ack_set.insert(src);
+            } else {
+                info!("Received ack for packet number {:?} from {:?} for message {:?}", packet_number, src, packet_number)
             }
         }
     }
