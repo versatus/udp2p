@@ -40,7 +40,7 @@ pub trait Packetize<'a>: ByteRep<'a> {
 #[macro_export]
 macro_rules! packetize {
     ($bytes:expr, $id:expr, $ret:expr, $size:expr) => {
-        if $size < 2048 {
+        if $size < 1024 {
             let hex_string: ::hex::encode(&$bytes);
             let packet = ::protocol::Packet {
                 id: $id,
@@ -52,11 +52,11 @@ macro_rules! packetize {
             return vec![packet]
         } else {
             let mut n_packets = $size / 2048;
-            if $size % 2048 != 0 {
+            if $size % 1024 != 0 {
                 n_packets += 1;
             }
             let mut start = 0;
-            let mut end = 2048;
+            let mut end = 1024;
             let mut packets = vec![];
 
             for n in 0..n_packets {
@@ -65,7 +65,7 @@ macro_rules! packetize {
                 } else {
                     packets.push(bytes[start..end].to_vec());
                     start = end;
-                    end += 2048;
+                    end += 1024;
                 }
             }
             
@@ -100,7 +100,7 @@ macro_rules! packetize {
 /// 
 
 pub fn packetize(bytes: MessageData, id: InnerKey, ret: ReturnReceipt) -> Packets {
-    if bytes.len() < 2048 {
+    if bytes.len() < 1024 {
         let hex_string = hex::encode(&bytes);
         let packet = Packet {
                 id,
@@ -112,13 +112,13 @@ pub fn packetize(bytes: MessageData, id: InnerKey, ret: ReturnReceipt) -> Packet
         return vec![packet]
     }
 
-    let mut n_packets = bytes.len() / 2048;
-    if n_packets % 2048 != 0 {
+    let mut n_packets = bytes.len() / 1024;
+    if n_packets % 1024 != 0 {
         n_packets += 1;
     }
     
     let mut start = 0;
-    let mut end = 2048;
+    let mut end = 1024;
     let mut packets = vec![];
 
     for n in 0..n_packets {
@@ -127,7 +127,7 @@ pub fn packetize(bytes: MessageData, id: InnerKey, ret: ReturnReceipt) -> Packet
         } else {
             packets.push(bytes[start..end].to_vec());
             start = end;
-            end += 2048;
+            end += 1024;
         }
     }
     
