@@ -166,6 +166,10 @@ impl GDUdp {
             map.insert(packet.n, (sent_set, ack_set, packet.clone(), attempts));
             self.outbox.insert(packet.id, map);
         }
+
+        sock.set_multicast_ttl_v4(255).unwrap();
+        sock.set_ttl(255).unwrap();
+
         if let Some(bytes) = packet.as_bytes() {
             if let Err(e) = sock.send_to(&bytes, peer) {
                 info!("Error sending packet to {:?}:\n{:?}", peer, e)
