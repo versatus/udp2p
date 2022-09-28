@@ -1,16 +1,16 @@
 #![allow(dead_code)]
-use crate::gossip::protocol::GossipMessage;
 use crate::discovery::kad::Kademlia;
-use crate::protocol::protocol::{Message, MessageKey};
+use crate::gossip::protocol::GossipMessage;
+use crate::protocol::protocol::{Header, Message, MessageKey};
+use crate::traits::routable::Routable;
+use crate::utils::utils::ByteRep;
+use log::info;
+use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
-use crate::utils::utils::ByteRep;
 use std::time::Instant;
-use rand::Rng;
-use crate::traits::routable::Routable;
-use log::info;
 
 /// A configuration struct for the user to pass different
 /// parameters into the gossip struct.
@@ -36,7 +36,6 @@ pub struct GossipConfig {
     check: usize,
 }
 
-
 /// The core gossip struct. This is the gosisp engine that handles incoming and outgoing
 /// messages, peer sampling, and other message
 pub struct GossipService {
@@ -58,11 +57,10 @@ pub struct GossipService {
 }
 
 impl GossipConfig {
-
     /// Create a new GossipConfig Instance
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * id - a string representing the protocol id
     /// * history_len - the number of heartbeats to keep messages in the cache
     /// * history_gossip - the number of heartbeats to gossip about messages
@@ -73,7 +71,7 @@ impl GossipConfig {
     /// * factor - the percentage of 'connected' peers to gossip to
     /// * interval - the length of a heartbeat
     /// * check - the number of heartbeats between sending ping messages
-    /// 
+    ///
     pub fn new(
         id: String,
         history_len: usize,
@@ -96,7 +94,7 @@ impl GossipConfig {
             min_gossip,
             factor,
             interval,
-            check
+            check,
         }
     }
 
@@ -112,20 +110,19 @@ impl GossipConfig {
 }
 
 impl GossipService {
-
     /// Creates a new instance of GossipService
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * address - the local node's socket address
     /// * to_gossip_rx - the receiver for the gossip service to accept incoming messages from the transport layer to
     /// * to_transport_tx - the sender used for sending messages to the transport layer
     /// * to_app_tx - a sender to send to apps that this create is integrated into
-    /// * kad - a kademlia dht used as a peer discovery routing table 
+    /// * kad - a kademlia dht used as a peer discovery routing table
     /// * config - a GossipConfig instance that contains configuration information for the local gossip instance
     /// * heartbeat - the time of the last heartbeat
     /// * ping_pong - the time of the last ping message sent
-    /// 
+    ///
     pub fn new(
         address: SocketAddr,
         public_ip: SocketAddr,
@@ -168,9 +165,9 @@ impl GossipService {
         let now = Instant::now();
         if now.duration_since(self.heartbeat) > self.config.interval {
             self.heartbeat = now;
-            return true
+            return true;
         }
-        false 
+        false
     }
 
     /// Dissemenates messages that are still "alive" and in the message cache.
@@ -179,38 +176,42 @@ impl GossipService {
         let cache_clone = self.cache.clone();
         if self.heartbeat() {
             cache_clone.iter().for_each(|(key, (message, expires))| {
-                if now.duration_since(*expires) < self.config.interval * self.config.history_gossip as u32 {
+                if now.duration_since(*expires)
+                    < self.config.interval * self.config.history_gossip as u32
+                {
                     if let Some(gossip_message) = GossipMessage::from_bytes(&message.msg) {
                         let src = gossip_message.sender;
-                        self.publish(&src, message.clone())     
+                        self.publish(&src, message.clone())
                     }
                 }
-                if now.duration_since(*expires) > self.config.interval * self.config.history_len as u32 {
+                if now.duration_since(*expires)
+                    > self.config.interval * self.config.history_len as u32
+                {
                     self.cache.remove(&key);
                 }
             });
 
             // TODO: Add Ping Pong messages every x heartbeats.
-            if now.duration_since(self.ping_pong) > self.config.interval * self.config.check as u32 {
+            if now.duration_since(self.ping_pong) > self.config.interval * self.config.check as u32
+            {
                 // Send Ping message to peers
             }
         }
     }
 
     /// Forwards a message and an intended destination address to the transport layer
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * src - the destination socket address
     /// * message - a Message to be packetized and forwarded to the destination
-    /// 
+    ///
     pub fn publish(&mut self, src: &SocketAddr, message: Message) {
         let local = self.kad.routing_table.local_info.clone();
         let gossip_to = {
             let mut sample = HashSet::new();
             let peers = self.kad.routing_table.get_closest_peers(local, 30).clone();
             if peers.len() > 7 {
-
                 let infection_factor = self.config.factor;
                 let n_peers = peers.len() as f64 * infection_factor;
                 for _ in 0..n_peers as usize {
@@ -220,9 +221,8 @@ impl GossipService {
                         sample.insert(address);
                     }
                 }
-            
-                sample
 
+                sample
             } else {
                 peers.iter().for_each(|peer| {
                     let address = peer.get_address();
@@ -243,35 +243,47 @@ impl GossipService {
         });
     }
 
-
     /// handles an incoming message by placing it in the cache and forwarding to peers
     /// if it is not already in the cache. If it is already in the cache it is ignored
     /// If the protocol is 'chat' and the source is not the local node it prints the message
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * src - the sender of the incoming message
     /// * msg - the incoming message to be handled
-    /// 
+    ///
     fn handle_message(&mut self, src: &SocketAddr, msg: &Message) -> Option<GossipMessage> {
-        if let Some(message) = GossipMessage::from_bytes(&msg.msg){
-            if !self.cache.contains_key(&MessageKey::from_inner(message.id)) {
-                if *src != self.address {
-                    if let Err(e) = self.to_app_tx.send(message.clone()) {
-                        info!("Error sending message to application layer: {:?}", e)
-                    }
-                    let key = MessageKey::from_inner(message.id);
-                    self.publish(src, msg.clone());
-                    self.cache.entry(key).or_insert((msg.clone(), Instant::now()));    
-                    return Some(message)
-                } else {
-                    let key = MessageKey::from_inner(message.id);
-                    self.cache.entry(key).or_insert((msg.clone(), Instant::now()));
-                    return None
-
+        if let Some(message) = GossipMessage::from_bytes(&msg.msg) {
+            if msg.head == Header::RaptorQGossip {
+                println!("Captured {:?}", msg.head);
+                if let Err(e) = self.to_app_tx.send(message.clone()) {
+                    info!("Error sending message to application layer: {:?}", e)
                 }
+                let key = MessageKey::from_inner(message.id);
+                self.publish(src, msg.clone());
+                return Some(message);
             } else {
-                None
+                if !self.cache.contains_key(&MessageKey::from_inner(message.id)) {
+                    if *src != self.address {
+                        if let Err(e) = self.to_app_tx.send(message.clone()) {
+                            info!("Error sending message to application layer: {:?}", e)
+                        }
+                        let key = MessageKey::from_inner(message.id);
+                        self.publish(src, msg.clone());
+                        self.cache
+                            .entry(key)
+                            .or_insert((msg.clone(), Instant::now()));
+                        return Some(message);
+                    } else {
+                        let key = MessageKey::from_inner(message.id);
+                        self.cache
+                            .entry(key)
+                            .or_insert((msg.clone(), Instant::now()));
+                        return None;
+                    }
+                } else {
+                    None
+                }
             }
         } else {
             None
@@ -289,7 +301,7 @@ impl GossipService {
                     }
                 }
             }
-            Err(_) => { }
+            Err(_) => {}
         }
     }
 
