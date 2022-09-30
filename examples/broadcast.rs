@@ -9,6 +9,7 @@ use std::process::exit;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::{Duration, Instant};
 use std::{fs, thread};
+use tokio::io::split;
 use udp2p::discovery::kad::Kademlia;
 use udp2p::discovery::routing::RoutingTable;
 use udp2p::gossip::gossip::{GossipConfig, GossipService};
@@ -16,7 +17,7 @@ use udp2p::gossip::protocol::GossipMessage;
 use udp2p::node::peer_id::PeerId;
 use udp2p::node::peer_info::PeerInfo;
 use udp2p::node::peer_key::Key;
-use udp2p::protocol::protocol::{AckMessage, Header, Message, MessageKey};
+use udp2p::protocol::protocol::{AckMessage, Header, Message, MessageKey, packetize, split_into_packets};
 use udp2p::transport::handler::MessageHandler;
 use udp2p::transport::transport::Transport;
 use udp2p::utils::utils::ByteRep;
@@ -43,7 +44,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (to_kad_tx, to_kad_rx) = channel();
     let (incoming_ack_tx, incoming_ack_rx): (Sender<AckMessage>, Receiver<AckMessage>) = channel();
     let (to_app_tx, _to_app_rx) = channel::<GossipMessage>();
-    let (chat_tx, chat_rx) = channel::<GossipMessage>();
 
     // Initialize local peer information
     let key: Key = Key::rand();
@@ -65,22 +65,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ping_pong.clone(),
     );
     if args().len()>=2{
+        let data=args().nth(1).unwrap().clone();
+        let v:Vec<&str>=data.split(":").collect();
+
         let key1: Key = Key::rand();
         let id1: PeerId = PeerId::from_key(&key);
-        let info1: PeerInfo = PeerInfo::new(id1, key1, pub_ip.clone().unwrap(), 1234);
+        let info1: PeerInfo = PeerInfo::new(id1, key1, pub_ip.clone().unwrap(), v.get(1).unwrap().parse::<u32>().unwrap());
         kad.add_peer(info1.as_bytes().unwrap());
 
     }
-
-    println!("Neighbours {:?}", kad.routing_table.get_all_peers().len());
-
-
 
     let mut transport = Transport::new(
         info.address.clone(),
         incoming_ack_rx,
         to_transport_rx,
-        false,
     );
 
     let mut message_handler = MessageHandler::new(
@@ -144,46 +142,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(bytes) = info.as_bytes() {
             gossip.kad.add_peer(bytes)
         }
-    } else {
+    }
+    for arg in args().skip(2){
+        let key: Key = Key::rand();
+        let id: PeerId = PeerId::from_key(&key);
+        let info: PeerInfo = PeerInfo::new(id, key, pub_ip.clone().unwrap(), port as u32);
         if let Some(bytes) = info.as_bytes() {
             gossip.kad.add_peer(bytes)
         }
     }
+    println!("Neighbours {:?}", gossip.kad.routing_table.get_all_peers().len());
+    println!("Neighbours {:?}", gossip.kad.routing_table.get_all_peers());
+
 
     let thread_to_gossip = to_gossip_tx.clone();
-    let new_chat=chat_tx.clone();
     thread::spawn(move || {
-        let mut line = String::new();
-        let raw_contents = read_file(PathBuf::from("src/transactions.json"));
-        let msg_id = MessageKey::rand();
-        let msg = GossipMessage {
-            id: msg_id.inner(),
-            data: raw_contents,
-            sender: addr.clone(),
-        };
+        if args().len()>=2 {
+            let mut line = String::new();
+            let input = std::io::stdin().read_line(&mut line);
+            let raw_contents = read_file(PathBuf::from("src/record/record.rs"));
+            let msg_id = MessageKey::rand();
 
-        let message = Message {
-            head: Header::RaptorQGossip,
-            msg: msg.as_bytes().unwrap(),
-        };
+            let msg = GossipMessage {
+                id: msg_id.inner(),
+                data: raw_contents,
+                sender: addr.clone(),
+            };
 
-        if let Err(_) = thread_to_gossip.clone().send((addr.clone(), message)) {
-            println!("Error sending message to gossip")
-        }
+            let message = Message {
+                head: Header::RaptorQGossip,
+                msg: msg.as_bytes().unwrap(),
+            };
 
-        new_chat.send(msg.clone());
-    });
-
-    thread::spawn(move || loop {
-        match chat_rx.recv() {
-            Ok(string) =>
-                //println!("MAAA {:?}", String::from_utf8_lossy(string.data.as_slice())),
-                print!("aaa"),
-            Err(_) => {}
+            if let Err(_) = thread_to_gossip.clone().send((addr.clone(), message)) {
+                println!("Error sending message to gossip")
+            }
         }
     });
 
-    gossip.start(chat_tx.clone());
+
+    gossip.start(to_app_tx.clone());
 
     Ok(())
 }
@@ -197,3 +195,19 @@ pub fn read_file(file_path: PathBuf) -> Vec<u8> {
         .expect("buffer overflow");
     buffer
 }
+
+//GossipMessage For PeerID
+
+
+//PeerID -- XOR Distance To all the peers within bootstrap node
+
+//Top K neigbours (k-nn algorithm)
+
+//Top K PeerIds
+
+// ID1--->(OthersIds add to routing table)
+
+// Check if decoder hash has taht packet ID
+//If not create decoderhash for that packet ID
+
+//

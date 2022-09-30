@@ -1,10 +1,10 @@
 #![allow(unused_imports)]
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::mem;
-use crate::utils::utils::timestamp_now;
 use crate::node::peer_id::PeerId;
 use crate::node::peer_info::PeerInfo;
+use crate::utils::utils::timestamp_now;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::error::Error;
+use std::mem;
 
 /// A trait applied to any kind of key value storing
 /// struct that is used to maintain records and providers

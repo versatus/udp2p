@@ -1,5 +1,6 @@
-use crate::utils::utils::ByteRep;
 use crate::impl_ByteRep;
+use crate::utils::utils::ByteRep;
+use raptorq::{Decoder, Encoder, EncodingPacket, ObjectTransmissionInformation};
 use serde::{Deserialize, Serialize};
 
 impl_ByteRep!(for Packet, AckMessage, Message, MessageKey, Header, KadMessage);
@@ -29,6 +30,22 @@ pub type ReturnReceipt = u8;
 pub type AddressBytes = Vec<u8>;
 pub type Packets = Vec<Packet>;
 
+/// For RaptorQ
+// using random 32 bytes - lets say ipfs Hash
+const BATCH_ID_SIZE: usize = 32;
+//How many packets to recieve from socket in single system call
+pub const NUM_RCVMMSGS: usize = 32;
+/// Maximum over-the-wire size of a Transaction
+///   1280 is IPv6 minimum MTU
+///   40 bytes is the size of the IPv6 header
+///   8 bytes is the size of the fragment header
+pub const MTU_SIZE: usize = 1280;
+const PACKET_SNO: usize = 4;
+const FLAGS: usize = 1;
+///   40 bytes is the size of the IPv6 header
+///   8 bytes is the size of the fragment header
+const PAYLOAD_SIZE: usize = MTU_SIZE - PACKET_SNO - BATCH_ID_SIZE - FLAGS - 40 - 8;
+
 pub trait Protocol {}
 
 /// A trait implemented on objects that need to be sent across
@@ -47,9 +64,9 @@ macro_rules! packetize {
                 n: 1,
                 total_n: 1,
                 bytes: hex_string,
-                ret: $ret
+                ret: $ret,
             };
-            return vec![packet]
+            return vec![packet];
         } else {
             let mut n_packets = $size / 2048;
             if $size % 1024 != 0 {
@@ -60,7 +77,7 @@ macro_rules! packetize {
             let mut packets = vec![];
 
             for n in 0..n_packets {
-                if n == n_packets-1 {
+                if n == n_packets - 1 {
                     packets.push(bytes[start..].to_vec());
                 } else {
                     packets.push(bytes[start..end].to_vec());
@@ -68,17 +85,21 @@ macro_rules! packetize {
                     end += 1024;
                 }
             }
-            
-            let packets: Packets = packets.iter().enumerate().map(|(idx, packet)| {
-                let hex_string = hex::encode(&packet);
-                ::protocol::Packet {
-                    id,
-                    n: idx + 1,
-                    total_n: packets.len(),
-                    bytes: hex_string,
-                    ret
-                }
-            }).collect();
+
+            let packets: Packets = packets
+                .iter()
+                .enumerate()
+                .map(|(idx, packet)| {
+                    let hex_string = hex::encode(&packet);
+                    ::protocol::Packet {
+                        id,
+                        n: idx + 1,
+                        total_n: packets.len(),
+                        bytes: hex_string,
+                        ret,
+                    }
+                })
+                .collect();
 
             packets
         }
@@ -87,42 +108,42 @@ macro_rules! packetize {
 
 /// A function that returns a vector of *n* Packet(s) based on the size of
 /// the MessageData passed to it.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * bytes - a vector of u8 bytes representing the message data to be split up into packets
 /// * id - a common id shared by all packets derived from the same message for reassembly by the receiver
 /// * ret - a 0 or 1 representing whether a return receipt is required of the sender
-/// 
+///
 /// TODO:
-/// 
+///
 /// Build a macro for this
-/// 
+///
 
 pub fn packetize(bytes: MessageData, id: InnerKey, ret: ReturnReceipt) -> Packets {
     if bytes.len() < 1024 {
         let hex_string = hex::encode(&bytes);
         let packet = Packet {
-                id,
-                n: 1,
-                total_n: 1,
-                bytes: hex_string,
-                ret
+            id,
+            n: 1,
+            total_n: 1,
+            bytes: hex_string,
+            ret,
         };
-        return vec![packet]
+        return vec![packet];
     }
 
     let mut n_packets = bytes.len() / 1024;
     if n_packets % 1024 != 0 {
         n_packets += 1;
     }
-    
+
     let mut start = 0;
     let mut end = 1024;
     let mut packets = vec![];
 
     for n in 0..n_packets {
-        if n == n_packets-1 {
+        if n == n_packets - 1 {
             packets.push(bytes[start..].to_vec());
         } else {
             packets.push(bytes[start..end].to_vec());
@@ -130,17 +151,21 @@ pub fn packetize(bytes: MessageData, id: InnerKey, ret: ReturnReceipt) -> Packet
             end += 1024;
         }
     }
-    
-    let packets: Packets = packets.iter().enumerate().map(|(idx, packet)| {
-        let hex_string = hex::encode(&packet);
-        Packet {
-            id,
-            n: idx + 1,
-            total_n: packets.len(),
-            bytes: hex_string,
-            ret
-        }
-    }).collect();
+
+    let packets: Packets = packets
+        .iter()
+        .enumerate()
+        .map(|(idx, packet)| {
+            let hex_string = hex::encode(&packet);
+            Packet {
+                id,
+                n: idx + 1,
+                total_n: packets.len(),
+                bytes: hex_string,
+                ret,
+            }
+        })
+        .collect();
 
     packets
 }
@@ -168,20 +193,20 @@ pub struct Packet {
 pub struct AckMessage {
     pub packet_id: InnerKey,
     pub packet_number: usize,
-    pub src: AddressBytes
+    pub src: AddressBytes,
 }
 
 /// Headers to identify and route messages to the proper component
 /// Request, Response, Gossip and Ack allows for easy routing once
 /// the packets have been received and aggregated into a message
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Header {
     Request,
     Response,
     Gossip,
     Ack,
+    RaptorQGossip,
 }
-
 /// A message struct contains a header and message data
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Message {
@@ -190,7 +215,9 @@ pub struct Message {
 }
 
 /// A tuple struct containing a byte representation of a 256 bit key
-#[derive(Ord, PartialOrd, PartialEq, Eq, Clone, Hash, Serialize, Deserialize, Default, Copy, Debug)]
+#[derive(
+    Ord, PartialOrd, PartialEq, Eq, Clone, Hash, Serialize, Deserialize, Default, Copy, Debug,
+)]
 pub struct MessageKey(InnerKey);
 
 /// TODO: Create a trait called Key to apply to all the different types of keys with the same required
@@ -219,7 +246,7 @@ impl MessageKey {
         (0..bytes).into_iter().for_each(|i| {
             ret.0[i] = 0;
         });
-        ret.0[bytes] &= 0xFF >>(bit);
+        ret.0[bytes] &= 0xFF >> (bit);
         ret.0[bytes] |= 1 << (8 - bit - 1);
 
         ret
@@ -243,4 +270,77 @@ pub enum KadMessage {
     Request(RequestBytes),
     Response(ResponseBytes),
     Kill,
+}
+
+/// `split_into_packets` takes a `full_list` of bytes, a `batch_id` and an `erasure_count` and returns a
+/// `Vec<Vec<u8>>` of packets
+///
+/// Arguments:
+///
+/// * `full_list`: The list of bytes to be split into packets
+/// * `batch_id`: This is a unique identifier for the batch of packets.
+/// * `erasure_count`: The number of packets that can be lost and still be able to recover the original data.
+pub fn split_into_packets(
+    full_list: &[u8],
+    batch_id: [u8; BATCH_ID_SIZE],
+    erasure_count: u32,
+) -> Vec<Vec<u8>> {
+    let packet_holder = encode_into_packets(full_list, erasure_count);
+    let mut headered_packets: Vec<Vec<u8>> = vec![];
+    for (_, ep) in packet_holder.into_iter().enumerate() {
+        headered_packets.push(create_packet(batch_id, ep))
+    }
+    println!("Packets len {:?}", headered_packets.len());
+    headered_packets
+}
+
+/// It takes a list of bytes and an erasure count, and returns a list of packets
+///
+/// Arguments:
+///
+/// * `unencoded_packet_list`: This is the list of packets that we want to encode.
+/// * `erasure_count`: The number of packets that can be lost and still be able to recover the original
+/// data.
+///
+/// Returns:
+///
+/// A vector of vectors of bytes.
+pub fn encode_into_packets(unencoded_packet_list: &[u8], erasure_count: u32) -> Vec<Vec<u8>> {
+    let encoder = Encoder::with_defaults(unencoded_packet_list, (PAYLOAD_SIZE) as u16);
+    let packets: Vec<Vec<u8>> = encoder
+        .get_encoded_packets(erasure_count)
+        .iter()
+        .map(|packet| packet.serialize())
+        .collect();
+
+    //Have to be transmitter to peers
+    //println!("encoder config {:?}", encoder.get_config());
+    println!("Packet size after raptor: {}", packets[0].len());
+    packets
+}
+
+/// It takes a batch id, a sequence number, and a payload, and returns a packet
+///
+/// Arguments:
+///
+/// * `batch_id`: This is the batch id that we're sending.
+/// * `payload`: the data to be sent
+///
+/// Returns:
+///
+/// A vector of bytes
+pub fn create_packet(batch_id: [u8; BATCH_ID_SIZE], payload: Vec<u8>) -> Vec<u8> {
+    let mut mtu: Vec<u8> = vec![];
+
+    // empty byte for raptor coding length
+    // doing the plus one since raptor is returning minus 1 length.
+    mtu.push(0_u8);
+    // forward-flag at the beginning
+    mtu.push(1_u8);
+
+    for i in 0..BATCH_ID_SIZE {
+        mtu.push(batch_id[i]);
+    }
+    mtu.extend_from_slice(&payload);
+    mtu
 }

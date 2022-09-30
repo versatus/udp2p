@@ -15,8 +15,7 @@ use std::sync::mpsc::Receiver;
 pub struct Transport {
     gd_udp: GDUdp,
     ia_rx: Receiver<AckMessage>,
-    om_rx: Receiver<(SocketAddr, Message)>,
-    reliable: bool,
+    om_rx: Receiver<(SocketAddr, Message)>
 }
 
 impl Transport {
@@ -30,14 +29,12 @@ impl Transport {
     pub fn new(
         addr: SocketAddr,
         ia_rx: Receiver<AckMessage>,
-        om_rx: Receiver<(SocketAddr, Message)>,
-        reliable: bool,
+        om_rx: Receiver<(SocketAddr, Message)>
     ) -> Transport {
         Transport {
             gd_udp: GDUdp::new(addr),
             ia_rx,
-            om_rx,
-            reliable,
+            om_rx
         }
     }
 
@@ -64,6 +61,12 @@ impl Transport {
     ///
     pub fn outgoing_msg(&mut self, sock: &UdpSocket) {
         let res = self.om_rx.try_recv();
+        let res1=res.clone();
+        if res1.is_ok(){
+            if res1.unwrap().1.head==Header::RaptorQGossip{
+                println!("Gossip header caught");
+            }
+        }
         match res {
             Ok((src, msg)) => match msg.head {
                 Header::Ack => {
@@ -80,9 +83,7 @@ impl Transport {
                     let split_peer: Vec<&str> = peer.split(":").collect();
                     let packets_id = MessageKey::rand().inner();
                     let packet_list =
-                        split_into_packets(&msg.as_bytes().unwrap(), packets_id, 3000);
-                    sock.set_multicast_ttl_v4(255).unwrap();
-                    sock.set_ttl(255).unwrap();
+                        split_into_packets(&msg.msg, packets_id, 3000);
                     for (_, packet) in packet_list.iter().enumerate() {
                         if split_local[0] == split_peer[0] {
                             let new_ip = "127.0.0.1".parse::<Ipv4Addr>().unwrap();
@@ -93,8 +94,11 @@ impl Transport {
                             if let Err(e) = sock.send_to(&packet, new_src) {
                                 info!("Error sending packet to {:?}:\n{:?}", new_src, e)
                             }
+
+                            println!("Sending packet to {:?}",new_src);
                         } else {
                             // Sending a packet to a given address.
+                            println!("Sending packet to {:?}",src);
                             if let Err(e) = sock.send_to(&packet, src) {
                                 info!("Error sending packet to {:?}:\n{:?}", src, e)
                             }
