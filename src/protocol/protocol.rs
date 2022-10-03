@@ -44,7 +44,7 @@ const PACKET_SNO: usize = 4;
 const FLAGS: usize = 1;
 ///   40 bytes is the size of the IPv6 header
 ///   8 bytes is the size of the fragment header
-const PAYLOAD_SIZE: usize = MTU_SIZE - PACKET_SNO - BATCH_ID_SIZE - FLAGS - 40 - 8;
+const PAYLOAD_SIZE: usize = MTU_SIZE - PACKET_SNO - FLAGS - 40 - 8;
 
 pub trait Protocol {}
 
@@ -120,7 +120,7 @@ macro_rules! packetize {
 /// Build a macro for this
 ///
 
-pub fn packetize(bytes: MessageData, id: InnerKey, ret: ReturnReceipt) -> Packets {
+pub fn packetize(bytes: MessageData, id: InnerKey, ret: ReturnReceipt,is_raptor_q_packet:bool) -> Packets {
     if bytes.len() < 1024 {
         let hex_string = hex::encode(&bytes);
         let packet = Packet {
@@ -129,6 +129,7 @@ pub fn packetize(bytes: MessageData, id: InnerKey, ret: ReturnReceipt) -> Packet
             total_n: 1,
             bytes: hex_string,
             ret,
+            is_raptor_q_packet
         };
         return vec![packet];
     }
@@ -163,6 +164,7 @@ pub fn packetize(bytes: MessageData, id: InnerKey, ret: ReturnReceipt) -> Packet
                 total_n: packets.len(),
                 bytes: hex_string,
                 ret,
+                is_raptor_q_packet
             }
         })
         .collect();
@@ -182,6 +184,7 @@ pub struct Packet {
     pub total_n: usize,
     pub bytes: String,
     pub ret: ReturnReceipt,
+    pub is_raptor_q_packet:bool
 }
 
 /// An acknowledge message sent back to the sender of a packet
@@ -288,7 +291,7 @@ pub fn split_into_packets(
     let packet_holder = encode_into_packets(full_list, erasure_count);
     let mut headered_packets: Vec<Vec<u8>> = vec![];
     for (_, ep) in packet_holder.into_iter().enumerate() {
-        headered_packets.push(create_packet(batch_id, ep))
+        headered_packets.push(ep)
     }
     println!("Packets len {:?}", headered_packets.len());
     headered_packets
@@ -343,4 +346,15 @@ pub fn create_packet(batch_id: [u8; BATCH_ID_SIZE], payload: Vec<u8>) -> Vec<u8>
     }
     mtu.extend_from_slice(&payload);
     mtu
+}
+
+
+pub fn get_batch_id(packet: &[u8; 1280]) -> [u8; BATCH_ID_SIZE] {
+    let mut batch_id: [u8; BATCH_ID_SIZE] = [0; BATCH_ID_SIZE];
+    let mut chunk_no: usize = 0;
+    for i in 3..(BATCH_ID_SIZE + 3) {
+        batch_id[chunk_no] = packet[i];
+        chunk_no += 1;
+    }
+    batch_id
 }

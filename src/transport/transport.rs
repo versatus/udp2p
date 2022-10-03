@@ -1,7 +1,5 @@
 use crate::gd_udp::gd_udp::GDUdp;
-use crate::protocol::protocol::{
-    packetize, split_into_packets, AckMessage, Header, Message, MessageKey,
-};
+use crate::protocol::protocol::{packetize, split_into_packets, AckMessage, Header, Message, MessageKey, Packets, Packet};
 use crate::utils::utils::ByteRep;
 use log::info;
 use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
@@ -71,7 +69,7 @@ impl Transport {
             Ok((src, msg)) => match msg.head {
                 Header::Ack => {
                     let packets_id = MessageKey::rand().inner();
-                    let packets = packetize(msg.as_bytes().unwrap().clone(), packets_id, 0u8);
+                    let packets = packetize(msg.as_bytes().unwrap().clone(), packets_id, 0u8,false);
                     packets.iter().for_each(|packet| {
                         if let Err(_) = sock.send_to(&packet.as_bytes().unwrap(), src) {}
                     });
@@ -82,28 +80,44 @@ impl Transport {
                     let peer = src.to_string();
                     let split_peer: Vec<&str> = peer.split(":").collect();
                     let packets_id = MessageKey::rand().inner();
-                    let packet_list =
+                    let packets =
                         split_into_packets(&msg.msg, packets_id, 3000);
-                    for (_, packet) in packet_list.iter().enumerate() {
+                    let packets: Packets = packets
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, packet)| {
+                            let hex_string = hex::encode(&packet);
+                            Packet {
+                                id:packets_id,
+                                n: idx + 1,
+                                total_n: packets.len(),
+                                bytes: hex_string,
+                                ret: 0,
+                                is_raptor_q_packet: true
+                            }
+                        })
+                        .collect();
+                    packets.iter().for_each(|packet| {
                         if split_local[0] == split_peer[0] {
                             let new_ip = "127.0.0.1".parse::<Ipv4Addr>().unwrap();
                             let port = split_peer[1].parse::<u32>().unwrap();
                             let new_src = format!("{:?}:{:?}", new_ip, port)
                                 .parse::<SocketAddr>()
                                 .unwrap();
-                            if let Err(e) = sock.send_to(&packet, new_src) {
-                                info!("Error sending packet to {:?}:\n{:?}", new_src, e)
+                            if let Some(bytes) = packet.as_bytes() {
+                                if let Err(e) = sock.send_to(&bytes, new_src) {
+                                    info!("Error sending packet to {:?}:\n{:?}", new_src, e)
+                                }
                             }
 
-                            println!("Sending packet to {:?}",new_src);
                         } else {
-                            // Sending a packet to a given address.
-                            println!("Sending packet to {:?}",src);
-                            if let Err(e) = sock.send_to(&packet, src) {
-                                info!("Error sending packet to {:?}:\n{:?}", src, e)
+                            if let Some(bytes) = packet.as_bytes() {
+                                if let Err(e) = sock.send_to(&bytes, src) {
+                                    info!("Error sending packet to {:?}:\n{:?}", src, e)
+                                }
                             }
                         }
-                    }
+                    });
                 }
                 _ => {
                     let ip = self.gd_udp.addr.to_string();
@@ -112,7 +126,7 @@ impl Transport {
                     let split_peer: Vec<&str> = peer.split(":").collect();
 
                     let packets_id = MessageKey::rand().inner();
-                    let packets = packetize(msg.as_bytes().unwrap().clone(), packets_id, 1u8);
+                    let packets = packetize(msg.as_bytes().unwrap().clone(), packets_id, 1u8,false);
                     packets.iter().for_each(|packet| {
                         if split_local[0] == split_peer[0] {
                             let new_ip = "127.0.0.1".parse::<Ipv4Addr>().unwrap();

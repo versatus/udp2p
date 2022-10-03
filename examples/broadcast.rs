@@ -17,7 +17,9 @@ use udp2p::gossip::protocol::GossipMessage;
 use udp2p::node::peer_id::PeerId;
 use udp2p::node::peer_info::PeerInfo;
 use udp2p::node::peer_key::Key;
-use udp2p::protocol::protocol::{AckMessage, Header, Message, MessageKey, packetize, split_into_packets};
+use udp2p::protocol::protocol::{
+    packetize, split_into_packets, AckMessage, Header, Message, MessageKey,
+};
 use udp2p::transport::handler::MessageHandler;
 use udp2p::transport::transport::Transport;
 use udp2p::utils::utils::ByteRep;
@@ -64,22 +66,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         interval,
         ping_pong.clone(),
     );
-    if args().len()>=2{
-        let data=args().nth(1).unwrap().clone();
-        let v:Vec<&str>=data.split(":").collect();
+    if args().len() >= 2 {
+        let data = args().nth(1).unwrap().clone();
+        let v: Vec<&str> = data.split(":").collect();
 
         let key1: Key = Key::rand();
         let id1: PeerId = PeerId::from_key(&key);
-        let info1: PeerInfo = PeerInfo::new(id1, key1, pub_ip.clone().unwrap(), v.get(1).unwrap().parse::<u32>().unwrap());
+        let info1: PeerInfo = PeerInfo::new(
+            id1,
+            key1,
+            pub_ip.clone().unwrap(),
+            v.get(1).unwrap().parse::<u32>().unwrap(),
+        );
         kad.add_peer(info1.as_bytes().unwrap());
-
     }
 
-    let mut transport = Transport::new(
-        info.address.clone(),
-        incoming_ack_rx,
-        to_transport_rx,
-    );
+    let mut transport = Transport::new(info.address.clone(), incoming_ack_rx, to_transport_rx);
 
     let mut message_handler = MessageHandler::new(
         to_transport_tx.clone(),
@@ -143,7 +145,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             gossip.kad.add_peer(bytes)
         }
     }
-    for arg in args().skip(2){
+    for arg in args().skip(2) {
         let key: Key = Key::rand();
         let id: PeerId = PeerId::from_key(&key);
         let info: PeerInfo = PeerInfo::new(id, key, pub_ip.clone().unwrap(), port as u32);
@@ -151,35 +153,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             gossip.kad.add_peer(bytes)
         }
     }
-    println!("Neighbours {:?}", gossip.kad.routing_table.get_all_peers().len());
+    println!(
+        "Neighbours {:?}",
+        gossip.kad.routing_table.get_all_peers().len()
+    );
     println!("Neighbours {:?}", gossip.kad.routing_table.get_all_peers());
-
 
     let thread_to_gossip = to_gossip_tx.clone();
     thread::spawn(move || {
-        if args().len()>=2 {
+        if args().len() >= 2 {
             let mut line = String::new();
-            let input = std::io::stdin().read_line(&mut line);
             let raw_contents = read_file(PathBuf::from("src/record/record.rs"));
-            let msg_id = MessageKey::rand();
+            println!("{:?}",raw_contents.len());
+            let input = std::io::stdin().read_line(&mut line);
 
+            let msg_id = MessageKey::rand();
             let msg = GossipMessage {
                 id: msg_id.inner(),
                 data: raw_contents,
                 sender: addr.clone(),
             };
-
             let message = Message {
                 head: Header::RaptorQGossip,
                 msg: msg.as_bytes().unwrap(),
             };
-
             if let Err(_) = thread_to_gossip.clone().send((addr.clone(), message)) {
                 println!("Error sending message to gossip")
             }
         }
     });
-
 
     gossip.start(to_app_tx.clone());
 
@@ -197,7 +199,6 @@ pub fn read_file(file_path: PathBuf) -> Vec<u8> {
 }
 
 //GossipMessage For PeerID
-
 
 //PeerID -- XOR Distance To all the peers within bootstrap node
 

@@ -1,13 +1,16 @@
 #![allow(dead_code)]
 use crate::gd_udp::gd_udp::GDUdp;
-use crate::protocol::protocol::{AckMessage, Header, InnerKey, KadMessage, Message, Packet};
+use crate::packetize;
+use crate::protocol::protocol::{
+    get_batch_id, AckMessage, Header, InnerKey, KadMessage, Message, Packet,
+};
 use crate::utils::utils::ByteRep;
 use log::info;
+use raptorq::{Decoder, Encoder, EncodingPacket, ObjectTransmissionInformation};
 use std::collections::HashMap;
 use std::net::{SocketAddr, UdpSocket};
 use std::process::id;
 use std::sync::mpsc::Sender;
-use crate::packetize;
 
 /// The core struct of the handler module
 /// Contains an outgoing message sender
@@ -23,6 +26,7 @@ pub struct MessageHandler {
     pending: HashMap<InnerKey, HashMap<usize, Packet>>,
     kad_tx: Sender<(SocketAddr, KadMessage)>,
     gossip_tx: Sender<(SocketAddr, Message)>,
+    decoder_hash: HashMap<[u8; 32], (usize, Decoder)>,
 }
 
 impl MessageHandler {
@@ -49,6 +53,7 @@ impl MessageHandler {
             pending,
             kad_tx,
             gossip_tx,
+            decoder_hash: Default::default(),
         }
     }
 
@@ -63,20 +68,52 @@ impl MessageHandler {
         let res = sock.recv_from(buf);
         match res {
             Ok((amt, src)) => {
-                if amt<1200{
-                    if let Some(packet) = self.process_packet(local, buf.to_vec(), amt, src) {
+                if let Some(packet) = self.process_packet(local, buf.to_vec(), amt, src) {
+                    if !packet.is_raptor_q_packet {
                         self.insert_packet(packet, src)
+                    } else {
+                        let mut data=hex::decode(packet.bytes).unwrap();
+                        let size=std::mem::size_of::<usize>();
+                        println!("Data {:?}, received {:?}",data.len(),amt-50);
+                        println!("Data :{:?}",data);
+                        match self.decoder_hash.get_mut(&packet.id) {
+                            Some((num_packets, decoder)) => {
+                                println!("Entered");
+                                *num_packets += 1;
+                                // Decoding the packet.
+                                let result = decoder.decode(EncodingPacket::deserialize(
+                                    &data[0..1280-50].to_vec(),
+                                ));
+                                println!("Received {:?}",result);
+                                if !result.is_none() {
+                                    // This is the part of the code that is sending the reassembled file to the `file_send` channel.
+                                    let result_bytes = result.unwrap();
+                                    let batch_id_str =
+                                        String::from(std::str::from_utf8(&packet.id).unwrap());
+                                    let msg = (batch_id_str, result_bytes);
+                                    self.decoder_hash.remove(&packet.id);
+                                }
+                            }
+                            None => {
+                                // This is creating a new decoder for a new batch.
+                                self.decoder_hash.insert(
+                                    packet.id,
+                                    (
+                                        1_usize,
+                                        Decoder::new(ObjectTransmissionInformation::new(
+                                            108, 1176, 1, 1, 8,
+                                        )),
+                                    ),
+                                );
+                            }
+                        }
                     }
-                }else{
-
-
-                        println!("Decoding for raptorQ packet {:?}",buf.slice(0,amt));
-
-
                 }
-
             }
-            Err(_) => {println!("Error occurred");}
+
+            Err(_) => {
+                println!("Error occurred");
+            }
         }
     }
 
