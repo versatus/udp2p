@@ -67,21 +67,27 @@ impl Transport {
         }
         match res {
             Ok((src, msg)) => match msg.head {
+                
                 Header::Ack => {
+                    dbg!("here 1");
                     let packets_id = MessageKey::rand().inner();
                     let packets = packetize(msg.as_bytes().unwrap().clone(), packets_id, 0u8,false);
+                    dbg!("here 2");
                     packets.iter().for_each(|packet| {
                         if let Err(_) = sock.send_to(&packet.as_bytes().unwrap(), src) {}
                     });
                 }
                 Header::RaptorQGossip => {
+                    dbg!("here 3");
                     let ip = self.gd_udp.addr.to_string();
                     let split_local: Vec<&str> = ip.split(":").collect();
                     let peer = src.to_string();
                     let split_peer: Vec<&str> = peer.split(":").collect();
                     let packets_id = MessageKey::rand().inner();
+                    dbg!("here 4");
                     let packets =
                         split_into_packets(&msg.msg, packets_id, 3000);
+                    dbg!("here 5");
                     let packets: Packets = packets
                         .iter()
                         .enumerate()
@@ -111,6 +117,7 @@ impl Transport {
                             }
 
                         } else {
+                            dbg!("here 5");
                             if let Some(bytes) = packet.as_bytes() {
                                 if let Err(e) = sock.send_to(&bytes, src) {
                                     info!("Error sending packet to {:?}:\n{:?}", src, e)

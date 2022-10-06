@@ -151,11 +151,15 @@ impl GossipService {
     /// The main gossip service loop
     pub fn start(&mut self, tx: Sender<GossipMessage>) {
         let inner_tx = tx.clone();
+        dbg!("IN GOSSIP START");
         loop {
             let tx = inner_tx.clone();
             self.kad.recv();
+            //dbg!("done self.kad.recv()");
             self.recv(tx.clone());
+            //dbg!("done self.recv()");
             self.gossip();
+            //dbg!("done self.gossip()");
         }
     }
 
@@ -253,14 +257,18 @@ impl GossipService {
     /// * msg - the incoming message to be handled
     ///
     fn handle_message(&mut self, src: &SocketAddr, msg: &Message) -> Option<GossipMessage> {
+        dbg!("IN GOSSIP HANDLE MESSAGE");
         if let Some(message) = GossipMessage::from_bytes(&msg.msg) {
             if msg.head == Header::RaptorQGossip {
                 println!("Captured {:?}", msg.head);
+                println!("msg head {:?}", msg.head);
                 if let Err(e) = self.to_app_tx.send(message.clone()) {
                     info!("Error sending message to application layer: {:?}", e)
                 }
+                dbg!("handle msg");
                 let key = MessageKey::from_inner(message.id);
                 self.publish(src, msg.clone());
+                dbg!("handle msg reutrning some msg");
                 return Some(message);
             } else {
                 if !self.cache.contains_key(&MessageKey::from_inner(message.id)) {
@@ -279,8 +287,10 @@ impl GossipService {
                         self.cache
                             .entry(key)
                             .or_insert((msg.clone(), Instant::now()));
+                            dbg!("DONE `handle_message`");
                         return None;
                     }
+                   
                 } else {
                     None
                 }
@@ -295,10 +305,13 @@ impl GossipService {
         let res = self.to_gossip_rx.try_recv();
         match res {
             Ok((src, msg)) => {
+                dbg!("received message in gossip.recv");
                 if let Some(string) = self.handle_message(&src, &msg) {
+                    dbg!("sending message to app layer");
                     if let Err(e) = tx.clone().send(string) {
                         info!("Error sending message");
                     }
+                    dbg!("done sending message to app layer");
                 }
             }
             Err(_) => {}

@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args().len() >= 2 {
         let data = args().nth(1).unwrap().clone();
         let v: Vec<&str> = data.split(":").collect();
-
+        dbg!("here");
         let key1: Key = Key::rand();
         let id1: PeerId = PeerId::from_key(&key);
         let info1: PeerInfo = PeerInfo::new(
@@ -78,6 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             pub_ip.clone().unwrap(),
             v.get(1).unwrap().parse::<u32>().unwrap(),
         );
+        dbg!("here2");
         kad.add_peer(info1.as_bytes().unwrap());
     }
 
@@ -157,16 +158,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Neighbours {:?}",
         gossip.kad.routing_table.get_all_peers().len()
     );
+    dbg!("here3");
     println!("Neighbours {:?}", gossip.kad.routing_table.get_all_peers());
 
+    dbg!("here4");
     let thread_to_gossip = to_gossip_tx.clone();
+    dbg!("here5");
+
+    //line 196 executes before be begin spawning new threads
     thread::spawn(move || {
         if args().len() >= 2 {
             let mut line = String::new();
+            dbg!("here6");
             let raw_contents = read_file(PathBuf::from("src/record/record.rs"));
-            println!("{:?}",raw_contents.len());
+            println!("HELLO {:?}",raw_contents);
             let input = std::io::stdin().read_line(&mut line);
-
+            println!("INPUT {:?}", input);
+            dbg!("here7");
             let msg_id = MessageKey::rand();
             let msg = GossipMessage {
                 id: msg_id.inner(),
@@ -177,13 +185,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 head: Header::RaptorQGossip,
                 msg: msg.as_bytes().unwrap(),
             };
+            dbg!("here8");
             if let Err(_) = thread_to_gossip.clone().send((addr.clone(), message)) {
                 println!("Error sending message to gossip")
             }
+            dbg!("here9");
         }
     });
 
+    dbg!("here10");
     gossip.start(to_app_tx.clone());
+    dbg!("here11");
 
     Ok(())
 }

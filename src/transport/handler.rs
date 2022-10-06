@@ -2,12 +2,14 @@
 use crate::gd_udp::gd_udp::GDUdp;
 use crate::packetize;
 use crate::protocol::protocol::{
-    get_batch_id, AckMessage, Header, InnerKey, KadMessage, Message, Packet,
+    get_batch_id, AckMessage, Header, InnerKey, KadMessage, Message, Packet, get_packet_id,
 };
 use crate::utils::utils::ByteRep;
 use log::info;
 use raptorq::{Decoder, Encoder, EncodingPacket, ObjectTransmissionInformation};
 use std::collections::HashMap;
+
+use thiserror::Error;
 use std::net::{SocketAddr, UdpSocket};
 use std::process::id;
 use std::sync::mpsc::Sender;
@@ -20,6 +22,12 @@ use std::sync::mpsc::Sender;
 /// and a gossip sender for sending messages to a gossip instance
 ///
 /// TODO: make kad_tx and gossip_tx optional
+/// 
+#[derive(Error, Debug)]
+pub enum MsgHandlingError {
+    #[error("inavlid seed generated")]
+    DecoderAddFailed(),
+}
 pub struct MessageHandler {
     om_tx: Sender<(SocketAddr, Message)>,
     ia_tx: Sender<AckMessage>,
@@ -69,21 +77,25 @@ impl MessageHandler {
         match res {
             Ok((amt, src)) => {
                 if let Some(packet) = self.process_packet(local, buf.to_vec(), amt, src) {
+                    dbg!("in recvb msg hcekcin gi f packet is raptorQ");
                     if !packet.is_raptor_q_packet {
-                        self.insert_packet(packet, src)
+                        self.insert_packet(packet, src);
                     } else {
+                        dbg!("Packet is RQPTORQ");
                         let mut data=hex::decode(packet.bytes).unwrap();
                         let size=std::mem::size_of::<usize>();
-                        println!("Data {:?}, received {:?}",data.len(),amt-50);
+                        println!("Data {:?}, received {:?}", data.len(), amt-50);
                         println!("Data :{:?}",data);
                         match self.decoder_hash.get_mut(&packet.id) {
                             Some((num_packets, decoder)) => {
                                 println!("Entered");
                                 *num_packets += 1;
+                                dbg!("here");
                                 // Decoding the packet.
                                 let result = decoder.decode(EncodingPacket::deserialize(
-                                    &data[0..1280-50].to_vec(),
+                                    &data[0..1228].to_vec(),
                                 ));
+                                dbg!("here");
                                 println!("Received {:?}",result);
                                 if !result.is_none() {
                                     // This is the part of the code that is sending the reassembled file to the `file_send` channel.
@@ -92,9 +104,10 @@ impl MessageHandler {
                                         String::from(std::str::from_utf8(&packet.id).unwrap());
                                     let msg = (batch_id_str, result_bytes);
                                     self.decoder_hash.remove(&packet.id);
-                                }
+                                } 
                             }
                             None => {
+                                dbg!("NO DECODER");
                                 // This is creating a new decoder for a new batch.
                                 self.decoder_hash.insert(
                                     packet.id,
@@ -105,6 +118,42 @@ impl MessageHandler {
                                         )),
                                     ),
                                 );
+                                   
+                                match self.decoder_hash.get_mut(&packet.id) {
+                                    Some((num_packets, decoder)) => {
+                                        println!("Entered");
+                                        *num_packets += 1;
+                                        dbg!("here");
+                                        // Decoding the packet.
+                                        let result = decoder.decode(EncodingPacket::deserialize(
+                                            &data[0..1228].to_vec(),
+                                        ));
+
+                                        match &result {
+                                            Some(_) => {
+                                                dbg!("here");
+                                                println!("Received {:?}",result);
+                                                // This is the part of the code that is sending the reassembled file to the `file_send` channel.
+                                                let result_bytes = result.unwrap();
+                                                if (result_bytes.len() != 0) {
+                                                    let batch_id_str = get_packet_id(&packet);
+                                                    let msg = (batch_id_str, result_bytes);
+                                                    self.decoder_hash.remove(&packet.id);
+                                                } else {
+                                                    println!("empty packet");
+                                                }
+                                                
+                                            }
+                                            None => {
+                                                dbg!("here");
+                                                println!("Received {:?}",result);
+                                            }
+                                        }
+                                    }
+                                    None => {
+                                        dbg!("Error; decoder could not be added");                                        
+                                    }
+                                }
                             }
                         }
                     }
