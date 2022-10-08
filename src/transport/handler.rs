@@ -1,18 +1,30 @@
 #![allow(dead_code)]
-use crate::gd_udp::gd_udp::GDUdp;
-use crate::packetize;
-use crate::protocol::protocol::{
-    get_batch_id, AckMessage, Header, InnerKey, KadMessage, Message, Packet, get_packet_id,
+use std::{
+    collections::HashMap,
+    net::{SocketAddr, UdpSocket},
+    process::id,
+    sync::mpsc::Sender,
 };
-use crate::utils::utils::ByteRep;
+
 use log::info;
 use raptorq::{Decoder, Encoder, EncodingPacket, ObjectTransmissionInformation};
-use std::collections::HashMap;
-
 use thiserror::Error;
-use std::net::{SocketAddr, UdpSocket};
-use std::process::id;
-use std::sync::mpsc::Sender;
+
+use crate::{
+    gd_udp::gd_udp::GDUdp,
+    packetize,
+    protocol::protocol::{
+        get_batch_id,
+        get_packet_id,
+        AckMessage,
+        Header,
+        InnerKey,
+        KadMessage,
+        Message,
+        Packet,
+    },
+    utils::utils::ByteRep,
+};
 
 /// The core struct of the handler module
 /// Contains an outgoing message sender
@@ -22,7 +34,6 @@ use std::sync::mpsc::Sender;
 /// and a gossip sender for sending messages to a gossip instance
 ///
 /// TODO: make kad_tx and gossip_tx optional
-/// 
 #[derive(Error, Debug)]
 pub enum MsgHandlingError {
     #[error("inavlid seed generated")]
@@ -42,12 +53,17 @@ impl MessageHandler {
     ///
     /// # Arguments
     ///
-    /// * om_tx - an outgoing message sender that sends a tuple of a SocketAddress (destination) and Message to send to the transport layer
-    /// * ia_tx - an incoming acknowledgement sender that sends an acknowledgement message to the transport (or GDUDP) layer
-    /// * pending - a hashmap containing a message key as the key and a hashmap of derived packets to store the packets until all are received and message can be reassembled
-    /// * kad_tx - a sender to send a tuple of the sender and the kad message to a kademlia dht
-    /// * gossip_tx - a sender to send a tuple of the sender address and the message to the gossip instance
-    ///
+    /// * om_tx - an outgoing message sender that sends a tuple of a
+    ///   SocketAddress (destination) and Message to send to the transport layer
+    /// * ia_tx - an incoming acknowledgement sender that sends an
+    ///   acknowledgement message to the transport (or GDUDP) layer
+    /// * pending - a hashmap containing a message key as the key and a hashmap
+    ///   of derived packets to store the packets until all are received and
+    ///   message can be reassembled
+    /// * kad_tx - a sender to send a tuple of the sender and the kad message to
+    ///   a kademlia dht
+    /// * gossip_tx - a sender to send a tuple of the sender address and the
+    ///   message to the gossip instance
     pub fn new(
         om_tx: Sender<(SocketAddr, Message)>,
         ia_tx: Sender<AckMessage>,
@@ -81,31 +97,32 @@ impl MessageHandler {
                     if !packet.is_raptor_q_packet {
                         self.insert_packet(packet, src);
                     } else {
+                        //TODO: rm dbg statements
                         dbg!("Packet is RQPTORQ");
-                        let mut data=hex::decode(packet.bytes).unwrap();
-                        let size=std::mem::size_of::<usize>();
-                        println!("Data {:?}, received {:?}", data.len(), amt-50);
-                        println!("Data :{:?}",data);
+                        let mut data = hex::decode(packet.bytes.clone()).unwrap();
+                        let size = std::mem::size_of::<usize>();
+                        println!("Data {:?}, received {:?}", data.len(), amt - 50);
+                        println!("Data :{:?}", data);
                         match self.decoder_hash.get_mut(&packet.id) {
                             Some((num_packets, decoder)) => {
                                 println!("Entered");
                                 *num_packets += 1;
                                 dbg!("here");
                                 // Decoding the packet.
-                                let result = decoder.decode(EncodingPacket::deserialize(
-                                    &data[0..1228].to_vec(),
-                                ));
+                                let result = decoder
+                                    .decode(EncodingPacket::deserialize(&data[0..1228].to_vec()));
                                 dbg!("here");
-                                println!("Received {:?}",result);
+                                println!("Received {:?}", result);
                                 if !result.is_none() {
-                                    // This is the part of the code that is sending the reassembled file to the `file_send` channel.
+                                    // This is the part of the code that is sending the reassembled
+                                    // file to the `file_send` channel.
                                     let result_bytes = result.unwrap();
                                     let batch_id_str =
                                         String::from(std::str::from_utf8(&packet.id).unwrap());
                                     let msg = (batch_id_str, result_bytes);
                                     self.decoder_hash.remove(&packet.id);
-                                } 
-                            }
+                                }
+                            },
                             None => {
                                 dbg!("NO DECODER");
                                 // This is creating a new decoder for a new batch.
@@ -118,7 +135,7 @@ impl MessageHandler {
                                         )),
                                     ),
                                 );
-                                   
+
                                 match self.decoder_hash.get_mut(&packet.id) {
                                     Some((num_packets, decoder)) => {
                                         println!("Entered");
@@ -132,8 +149,9 @@ impl MessageHandler {
                                         match &result {
                                             Some(_) => {
                                                 dbg!("here");
-                                                println!("Received {:?}",result);
-                                                // This is the part of the code that is sending the reassembled file to the `file_send` channel.
+                                                println!("Received {:?}", result);
+                                                // This is the part of the code that is sending the
+                                                // reassembled file to the `file_send` channel.
                                                 let result_bytes = result.unwrap();
                                                 if (result_bytes.len() != 0) {
                                                     let batch_id_str = get_packet_id(&packet);
@@ -142,31 +160,31 @@ impl MessageHandler {
                                                 } else {
                                                     println!("empty packet");
                                                 }
-                                                
-                                            }
+                                            },
                                             None => {
                                                 dbg!("here");
-                                                println!("Received {:?}",result);
-                                            }
+                                                println!("Received {:?}", result);
+                                            },
                                         }
-                                    }
+                                    },
                                     None => {
-                                        dbg!("Error; decoder could not be added");                                        
-                                    }
+                                        dbg!("Error; decoder could not be added");
+                                    },
                                 }
-                            }
+                            },
                         }
                     }
                 }
-            }
+            },
 
             Err(_) => {
                 println!("Error occurred");
-            }
+            },
         }
     }
 
-    /// Processes the packet, sends an acknowledgement if requested, and returns the packet
+    /// Processes the packet, sends an acknowledgement if requested, and returns
+    /// the packet
     ///
     /// # Arguments
     ///
@@ -174,7 +192,6 @@ impl MessageHandler {
     /// * buf - a vector of u8 bytes to write packet bytes to
     /// * amt - the number of bytes received by the socket
     /// * src - the sender of the message
-    ///
     pub fn process_packet(
         &self,
         local: SocketAddr,
@@ -204,14 +221,14 @@ impl MessageHandler {
         None
     }
 
-    /// Inserts a packet into the pending table, and checks if all the packets for the message they're dervied
-    /// from. If so it reassembles the message and calls handle_message
+    /// Inserts a packet into the pending table, and checks if all the packets
+    /// for the message they're dervied from. If so it reassembles the
+    /// message and calls handle_message
     ///
     /// # Arguments
     ///
     /// * packet - the packet received
     /// * src - the sender of the packet
-    ///
     pub fn insert_packet(&mut self, packet: Packet, src: SocketAddr) {
         if let Some(map) = self.pending.clone().get_mut(&packet.id) {
             map.entry(packet.n).or_insert(packet.clone());
@@ -239,9 +256,10 @@ impl MessageHandler {
     ///
     /// # Arguments
     ///
-    /// * packet - the final packet received, used to get the total number of packets
-    /// * map - the map of all the bytes for the message that needs to be assembled
-    ///
+    /// * packet - the final packet received, used to get the total number of
+    ///   packets
+    /// * map - the map of all the bytes for the message that needs to be
+    ///   assembled
     fn assemble_packets(&self, packet: Packet, map: HashMap<usize, Packet>) -> Option<Message> {
         let mut bytes = vec![];
         (1..=packet.total_n).into_iter().for_each(|n| {
@@ -257,7 +275,6 @@ impl MessageHandler {
     ///
     /// * message - the message to be routed
     /// * src - the sender of the message
-    ///
     fn handle_message(&self, message: Message, src: SocketAddr) {
         match message.head {
             Header::Request | Header::Response => {
@@ -266,20 +283,20 @@ impl MessageHandler {
                         info!("Error sending to kad");
                     }
                 }
-            }
+            },
             Header::Ack => {
                 if let Some(ack) = AckMessage::from_bytes(&message.msg) {
                     if let Err(_) = self.ia_tx.send(ack) {
                         info!("Error sending ack message")
                     }
                 }
-            }
+            },
             Header::Gossip => {
                 if let Err(_) = self.gossip_tx.send((src, message)) {
                     info!("Error sending to gossip");
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 }
