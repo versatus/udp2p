@@ -309,6 +309,7 @@ pub fn split_into_packets(
 ///
 /// A vector of vectors of bytes.
 pub fn encode_into_packets(unencoded_packet_list: &[u8], erasure_count: u32) -> Vec<Vec<u8>> {
+    dbg!("inside encode pacjets");
     let encoder = Encoder::with_defaults(unencoded_packet_list, (PAYLOAD_SIZE) as u16);
     let packets: Vec<Vec<u8>> = encoder
         .get_encoded_packets(erasure_count)
@@ -357,4 +358,8 @@ pub fn get_batch_id(packet: &[u8; 1280]) -> [u8; BATCH_ID_SIZE] {
         chunk_no += 1;
     }
     batch_id
+}
+
+pub fn get_packet_id(packet: &Packet) -> InnerKey {
+    return packet.id;
 }

@@ -93,6 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let thread_sock = sock.try_clone().expect("Unable to clone socket");
     thread::spawn(move || {
         let inner_sock = thread_sock.try_clone().expect("Unable to clone socket");
+        dbg!("IN SPAWN");
         thread::spawn(move || loop {
             transport.incoming_ack();
             transport.outgoing_msg(&inner_sock);

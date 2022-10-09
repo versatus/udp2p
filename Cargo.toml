@@ -34,3 +34,4 @@ futures = {version ="0.3.24", features = ["thread-pool"]}
 rand = "0.8.5"
 raptorq = "1.7.0"
 threadpool = "1.8.1"
+thiserror = "1.0.33"

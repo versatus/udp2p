@@ -70,6 +70,7 @@ impl Kademlia {
         let res = self.from_transport.try_recv();
         match res {
             Ok((_src, msg)) => {
+                dbg!("Received message from transport layer; handling in Kademlia");
                 self.handle_message(&msg);
             }
             Err(_) => {}
@@ -80,6 +81,7 @@ impl Kademlia {
         if now.duration_since(self.ping_pong) > self.interval {
             // Send ping messages to peers.
         }
+        
     }
 
     /// Adds a peer to the routing table if they don't exist
