@@ -100,6 +100,13 @@ impl MessageHandler {
                         //TODO: rm dbg statements
                         dbg!("Packet is RQPTORQ");
                         let mut data = hex::decode(packet.bytes.clone()).unwrap();
+
+                  
+                        if let Some(i) = data.iter().rposition(|x| *x != 0) {
+                            let new_len = i + 1;
+                            data.truncate(new_len);
+                        }
+
                         let size = std::mem::size_of::<usize>();
                         println!("Data {:?}, received {:?}", data.len(), amt - 50);
                         println!("Data :{:?}", data);
@@ -140,15 +147,16 @@ impl MessageHandler {
                                     Some((num_packets, decoder)) => {
                                         println!("Entered");
                                         *num_packets += 1;
-                                        dbg!("here");
+                                        dbg!("here1");
                                         // Decoding the packet.
                                         let result = decoder.decode(EncodingPacket::deserialize(
                                             &data[0..1228].to_vec(),
                                         ));
+                                        dbg!("here1");
 
                                         match &result {
                                             Some(_) => {
-                                                dbg!("here");
+                                                dbg!("here2");
                                                 println!("Received {:?}", result);
                                                 // This is the part of the code that is sending the
                                                 // reassembled file to the `file_send` channel.
